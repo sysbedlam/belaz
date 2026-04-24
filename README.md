@@ -1,153 +1,142 @@
-# BeLaz — AmneziaWG VPN Manager for OpenWrt
+# BeLaz — AmneziaWG VPN Manager для OpenWrt
 
-**BeLaz** is a LuCI web interface for managing [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-openwrt) VPN servers and clients on OpenWrt routers. It supports AWG protocol versions 1.0 and 2.0 with full obfuscation parameter control, multi-server setup, and advanced routing.
+Веб-интерфейс LuCI для управления VPN-инфраструктурой на роутере. Поддерживает несколько входных серверов AmneziaWG, гибкую маршрутизацию трафика через выходные ноды (AWG и VLESS), мониторинг состояния нод и управление клиентами.
 
----
-
-## Features
-
-### Server Management
-- Create and delete multiple AmneziaWG servers (AWG 1.0 / 2.0)
-- Auto-generated obfuscation parameters (Jc, Jmin, Jmax, S1–S4, H1–H4, I1)
-- AWG 2.0: range-based H1–H4 values, S3/S4 parameters, optional DNS masking via I1
-- Automatic firewall zone and forwarding rules via UCI
-- Custom port and subnet support
-
-### Client Management
-- Add / delete clients per server
-- Auto IP assignment within server subnet
-- Download `.conf` files directly from the web UI
-- Enable / disable individual clients without deleting them
-- Per-client traffic stats (RX / TX) with online/offline status badge
-
-### Advanced Routing
-- **Cascade** — chain one AWG tunnel through another (e.g. exit via a second VPN)
-- **Load balancing / failover** — multipath routing across multiple tunnels with configurable weights
-- **Policy-based routing** — route specific CIDRs (address lists) through a chosen tunnel or blackhole them
-- Separate Linux routing tables per exit node (tables 100–149)
-- Priority-based `ip rule` management (policy: 100–199, cascade: 200–299)
-
-### Address Lists
-- Named CIDR groups for use in policy routing rules
-- Manage lists from the UI (add, edit, delete)
-- Auto-normalize bare IPs to `/32`
-
-### Health Monitoring
-- Ping-based tunnel health check every 30 seconds
-- Automatically reapplies routing rules on recovery
-- Health status badges (↑/↓) in the Routing tab
+> ⚠️ Проект находится в активной разработке. Тестировался на OpenWrt 24.10.x, установленном на VPS (x86_64).
 
 ---
 
-## Requirements
+## Возможности
 
-- OpenWrt 24.04+ (tested on 24.04 x86_64)
-- [AmneziaWG kernel module and tools](https://github.com/Slava-Shchipunov/awg-openwrt)
-- LuCI web interface
-- `uhttpd`, `rpcd`
+**Входные серверы (AWG)**
+- Создание и удаление серверов AmneziaWG
+- Управление клиентами — добавление, удаление, QR-код, статистика трафика
+- Автоматическая генерация ключей и параметров обфускации
 
-### Install AmneziaWG (via SSH)
+**Выходные ноды**
+- AWG-ноды — загрузка из `.conf` файла клиентского конфига
+- VLESS-ноды — добавление по ссылке `vless://`, автоматическая настройка sing-box
+- Мониторинг статуса и латентности каждой ноды в реальном времени
 
-```sh
+**Маршрутизация**
+- **Cascade** — весь трафик сервера через конкретную ноду
+- **Balance** — балансировка нагрузки между нодами с весами
+- **Failover** — автоматическое переключение при падении ноды
+- **Policy rules** — маршрутизация по спискам IP/доменов (например, Telegram всегда через Финляндию)
+- **Address Lists** — управление списками для policy rules
+
+**Health Check**
+- AWG-ноды: ping через туннель, контроль потерь и латентности
+- VLESS-ноды: реальная latency через Clash API (sing-box)
+- Независимые настройки для AWG и VLESS
+- Автоматическое восстановление нод после сбоя
+
+---
+
+## Требования
+
+- OpenWrt 24.10.x (x86_64)
+- `amneziawg-tools` — устанавливается вручную (нет в официальных репозиториях)
+- `sing-box` — устанавливается из официальных репозиториев OpenWrt
+- `ip-full` — устанавливается из официальных репозиториев OpenWrt
+
+---
+
+## Установка
+
+### 1. Установка OpenWrt на VPS
+
+Инструкция по установке OpenWrt на VPS: [beit24.ru/blog/openwrt-on-vps.php](http://beit24.ru/blog/openwrt-on-vps.php)
+
+### 2. Установка зависимостей
+
+```bash
+opkg update
+opkg install ip-full sing-box
+```
+
+`amneziawg-tools` устанавливается через скрипт от [@Slava-Shchipunov](https://github.com/Slava-Shchipunov/awg-openwrt):
+
+```bash
 sh <(wget -O - https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/refs/heads/master/amneziawg-install.sh)
 ```
 
----
+### 3. Установка BeLaz
 
-## Installation
+Скачайте актуальный `.ipk` файл со [страницы релизов](https://github.com/sysbedlam/BeLaz/releases) и установите:
 
-### Option 1 — Install pre-built IPK
-
-Download the latest `.ipk` from [Releases](../../releases/latest) and install:
-
-```sh
+```bash
 opkg install luci-app-belaz_*.ipk
 ```
 
-### Option 2 — Build from source
-
-Requires Linux or WSL with standard shell tools (`tar`, `gzip`):
-
-```sh
-git clone https://github.com/sysbedlam/belaz.git
-cd belaz
-./build_ipk.sh [version] [arch]
-# Example:
-./build_ipk.sh 0.0.1 x86_64
-```
-
-Then copy the resulting `.ipk` to your router and install with `opkg install`.
+После установки перейдите в LuCI → **Services → BeLaz**.
 
 ---
 
-## File Structure
+## Структура проекта
 
 ```
 belaz/
-├── build_ipk.sh                                    # IPK build script
-├── htdocs/
-│   └── luci-static/resources/view/
-│       └── awg-manager.js                          # LuCI frontend (JavaScript)
+├── build_ipk.sh                          # Скрипт сборки .ipk пакета
+├── htdocs/luci-static/resources/view/
+│   └── awg-manager.js                    # Фронтенд LuCI
 └── root/
-    ├── usr/
-    │   ├── bin/
-    │   │   ├── awg-manager-backend                 # Shell backend (servers, clients, routing)
-    │   │   ├── awg-routing                         # Routing table management
-    │   │   └── awg-healthcheck                     # Tunnel health monitor
-    │   └── share/
-    │       ├── luci/menu.d/
-    │       │   └── luci-app-awg-manager.json       # LuCI menu entry
-    │       └── rpcd/acl.d/
-    │           └── luci-app-awg-manager.json       # rpcd ACL permissions
-    └── etc/
-        ├── cron.d/
-        │   └── awg-manager                         # Cron jobs (healthcheck)
-        └── init.d/
-            └── awg-manager                         # Init script (routing apply/flush)
+    ├── usr/bin/
+    │   ├── awg-manager-backend           # Бэкенд (UCI, конфиги, ключи)
+    │   ├── awg-routing                   # Управление IP rules и таблицами маршрутизации
+    │   ├── awg-healthcheck               # Мониторинг AWG нод
+    │   └── singbox-healthcheck           # Мониторинг VLESS нод через Clash API
+    ├── etc/
+    │   ├── crontabs/root                 # Расписание healthcheck
+    │   └── init.d/awg-manager            # Автозапуск маршрутизации
+    └── usr/share/
+        ├── luci/menu.d/                  # Меню LuCI
+        └── rpcd/acl.d/                   # Права доступа rpcd
 ```
 
 ---
 
-## How It Works
+## Сборка из исходников
 
-### Backend (`awg-manager-backend`)
-A shell script that handles all server-side operations called by LuCI via `rpcd/fs.exec`:
-- **Servers**: creates UCI network/firewall entries for each AWG interface
-- **Clients**: generates WireGuard config files, assigns IPs, registers peers via UCI
-- **Routing**: reads/writes `routing.json` and delegates apply to `awg-routing`
-- **Address lists**: manages named CIDR lists in `address-lists.json`
-
-### Routing (`awg-routing`)
-Applies Linux policy routing from `routing.json`:
-- Flushes rules (priority 100–299) and tables (100–149) on each apply
-- Assigns persistent table numbers per exit node (stored in `tables.json`)
-- Supports cascade, balancer (multipath `ip route`), and per-CIDR policy rules
-
-### Health Monitor (`awg-healthcheck`)
-Runs every 30 seconds (via two cron entries with 30s offset):
-- Pings 8.8.8.8 via each monitored interface
-- Writes status to `healthcheck.json`
-- Reapplies routing rules on state change
+```bash
+git clone https://github.com/sysbedlam/BeLaz.git
+cd BeLaz
+bash build_ipk.sh 0.7.2
+```
 
 ---
 
-## Configuration Files (on router)
+## Конфигурационные файлы
 
-| Path | Description |
-|---|---|
-| `/etc/awg-manager/servers/<name>/server.conf` | Server parameters |
-| `/etc/awg-manager/servers/<name>/clients/*.conf` | Client WireGuard configs |
-| `/etc/awg-manager/routing.json` | Routing rules (cascades, balancers, policies) |
-| `/etc/awg-manager/address-lists.json` | Address lists for policy routing |
-| `/etc/awg-manager/healthcheck.json` | Current tunnel health status |
-| `/etc/awg-manager/tables.json` | Routing table number registry |
+Все данные хранятся в `/etc/awg-manager/`:
+
+| Файл | Описание |
+|------|----------|
+| `routing.json` | Правила маршрутизации (cascade, balance, policy) |
+| `exitnodes.json` | Реестр выходных нод |
+| `healthcheck.json` | Текущий статус нод |
+| `healthcheck_history.json` | История проверок (счётчики) |
+| `healthcheck_config.json` | Настройки healthcheck для AWG |
+| `healthcheck_singbox_config.json` | Настройки healthcheck для VLESS |
+| `indexes.json` | Индексы серверов для routing tables |
 
 ---
 
-## License
+## Известные ограничения
+
+- Тестировалось только на x86_64 VPS
+- `amneziawg-tools` требует ручной установки
+- VLESS ноды требуют установленного `sing-box`
+
+---
+
+## Благодарности
+
+- **[Slava Shchipunov](https://github.com/Slava-Shchipunov/awg-openwrt)** — за скрипт установки amneziawg-tools на OpenWrt, без которого BeLaz не работает
+- **[itdog / podkop](https://github.com/itdoginfo/podkop)** — за вдохновение и идеи по работе с sing-box и маршрутизацией на OpenWrt
+
+---
+
+## Лицензия
 
 MIT
-
----
-
-*Developed by [beit24.ru](https://beit24.ru)*
